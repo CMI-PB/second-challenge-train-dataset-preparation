@@ -47,7 +47,7 @@ abtiters_baseline_mat_imputed_21 <- read.csv('abtiters_baseline_mat_imputed_21_0
 For more information, see [https://academic.oup.com/bioinformatics/article/32/24/3836/2525651]
 `ComBat` is a method to correct for batch effects, see[https://rdrr.io/bioc/sva/man/ComBat.html].  
 There are many different options for Combat, depending on the distribution of your data.  
-To help assess whether and how to use ComBat, we've created a helpful flow chart, [https://github.com/CMI-PB/2020_2021_data_merge/blob/main/figures/BatchCorrection_Flowchart.png]
+To help assess whether and how to use ComBat, we've created a helpful flow chart, [https://raw.githubusercontent.com/CMI-PB/2020_2021_data_merge/main/figures/BatchCorrection_Flowchart.png]
 
 ## Batch QC for cell frequency
 ### Prepare data
