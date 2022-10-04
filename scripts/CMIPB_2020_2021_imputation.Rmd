@@ -1,0 +1,314 @@
+---
+title: "Impute CMIPB 2020 and 2021 data using the MICE algorithm"
+author: "Anna Konstorum (anna.konstorum@yale.edu)"
+date: "3/8/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load libraries
+```{r, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(jsonlite)
+library(tibble)
+library(UpSetR)
+library(mice)
+```
+
+
+### Import Data (Visit 1)
+Data source: [https://github.com/joreynajr/cmi-pb-multiomics/tree/main/results/main/cmi_pb_datasets/processed/harmonized]
+Obtain files below from data source and save to local drive
+```{r}
+# data_dir is path to local drive where data is saved
+setwd(data_dir)
+
+abtiters.2020<-read.table('abtiters.mfi_normalized.2020.day0.pivoted.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+cytof.2020<-read.table('cytof.2020.day0.pivoted.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+olink.2020<-read.table('olink.2020.day0.pivoted.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+rnaseq.2020<-read.table('rnaseq.2020.day0.pivoted.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+meta.2020<-read.table('clinical_metadata.2020.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+
+abtiters.2021<-read.table('abtiters.mfi_normalized.2021.day0.pivoted.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+cytof.2021<-read.table('cytof.2021.day0.pivoted.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+olink.2021<-read.table('olink.2021.day0.pivoted.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+rnaseq.2021<-read.table('rnaseq.2021.day0.pivoted.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+meta.2021<-read.table('clinical_metadata.2021.tsv',sep='\t',header=TRUE,stringsAsFactors=TRUE,row.names=1)
+```
+
+#### Intersection of available 2020 data
+```{r}
+listInput = list(RNASeq = rownames(rnaseq.2020),Olink = rownames(olink.2020), 
+                 CyTOF = rownames(cytof.2020), abTiter = rownames(abtiters.2020))
+
+upset(fromList(listInput), order.by = "freq")
+```
+
+#### Heatmap of 2020 data availability (with RNASeq data subset for ease of visualization)
+```{r}
+rnaseq.2020_short<-rnaseq.2020[1:36,1:20]
+X_joined_short <- dplyr::full_join(rownames_to_column(log2(as.data.frame(rnaseq.2020_short+1))),
+                             rownames_to_column(cytof.2020), 
+                             by = "rowname")
+X_joined_short<-dplyr::full_join(X_joined_short,
+                                 rownames_to_column(olink.2020),
+                                 by = "rowname")
+X_joined_short<-dplyr::full_join(X_joined_short,
+                                 rownames_to_column(log2(abtiters.2020+1)),
+                                 by = "rowname")
+
+print(dim(X_joined_short))
+X_mat <- t(as.matrix(dplyr::select(X_joined_short, -rowname)))
+
+ggplot(reshape2::melt(X_mat)) +
+  geom_tile(aes(x = Var1, y = Var2, fill = value, color = value), size = 1) +
+  scale_fill_distiller(palette = "RdBu", direction = 1, na.value = "black") +
+  scale_color_distiller(palette = "RdBu", direction = 1, na.value = "black", guide = FALSE) +
+  ggtitle("RNA-Seq | CyTOF | OLINK") +
+  xlab("Features") +
+  ylab("Baseline Samples") +
+  cowplot::theme_map() +
+  theme(plot.title = element_text(hjust = .5, size = 14),
+        axis.title = element_text(hjust = .5),
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10, angle = 90))
+```
+
+#### Remove samples with no RNASeq data
+```{r}
+seq_u<-union(rownames(rnaseq.2020),rownames(olink.2020))
+seq_u_c<-union(seq_u,rownames(cytof.2020))
+samples_remove<-setdiff(rownames(abtiters.2020),seq_u_c)
+abtiters.2020_filt<-subset(abtiters.2020,!(rownames(abtiters.2020) %in% samples_remove))
+
+samples_remove<-setdiff(union(rownames(olink.2020),rownames(cytof.2020)),rownames(rnaseq.2020))
+olink.2020_filt<-subset(olink.2020,!(rownames(olink.2020) %in% samples_remove))
+cytof.2020_filt<-subset(cytof.2020,!(rownames(cytof.2020) %in% samples_remove))
+abtiters.2020_filt<-subset(abtiters.2020_filt,!(rownames(abtiters.2020_filt) %in% samples_remove))
+
+rnaseq.2020_short=rnaseq.2020[1:36,1:20]
+X_joined <- dplyr::full_join(rownames_to_column(log2(rnaseq.2020_short+1)),
+                             rownames_to_column(cytof.2020_filt),
+                             by = "rowname")
+print(dim(X_joined))
+X_joined<-dplyr::full_join(X_joined,
+                           rownames_to_column(olink.2020_filt),
+                           by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                           rownames_to_column(log2(abtiters.2020_filt+1)),
+                           by = "rowname")
+print(dim(X_joined))
+            
+
+X_mat <- t(as.matrix(dplyr::select(X_joined, -rowname)))
+
+ggplot(reshape2::melt(X_mat)) +
+  geom_tile(aes(x = Var1, y = Var2, fill = value, color = value), size = 1) +
+  scale_fill_distiller(palette = "RdBu", direction = 1, na.value = "black") +
+  scale_color_distiller(palette = "RdBu", direction = 1, na.value = "black", guide = FALSE) +
+  ggtitle("RNASeq | CyTOF | OLINK | abtiters") +
+  xlab("Features") +
+  ylab("Baseline Samples") +
+  cowplot::theme_map() +
+  theme(plot.title = element_text(hjust = .5, size = 14),
+        axis.title = element_text(hjust = .5),
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10, angle = 90))
+```
+
+## Impute data using MICE algorithm
+```{r}
+seq_u<-union(rownames(rnaseq.2020),rownames(olink.2020))
+seq_u_c<-union(seq_u,rownames(cytof.2020))
+samples_remove<-setdiff(rownames(abtiters.2020),seq_u_c)
+abtiters.2020_filt<-subset(abtiters.2020,!(rownames(abtiters.2020) %in% samples_remove))
+
+samples_remove<-setdiff(union(rownames(olink.2020),rownames(cytof.2020)),rownames(rnaseq.2020))
+olink.2020_filt<-subset(olink.2020,!(rownames(olink.2020) %in% samples_remove))
+cytof.2020_filt<-subset(cytof.2020,!(rownames(cytof.2020) %in% samples_remove))
+abtiters.2020_filt<-subset(abtiters.2020_filt,!(rownames(abtiters.2020_filt) %in% samples_remove))
+
+X_joined <- dplyr::full_join(rownames_to_column(log2(rnaseq.2020+1)),
+                             rownames_to_column(cytof.2020_filt),
+                             by = "rowname")
+print(dim(X_joined))
+X_joined<-dplyr::full_join(X_joined,
+                           rownames_to_column(olink.2020_filt),
+                           by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                           rownames_to_column(log2(abtiters.2020_filt+1)),
+                           by = "rowname")
+print(dim(X_joined))
+            
+
+X_mat <- t(as.matrix(dplyr::select(X_joined, -rowname)))
+
+imputed_Data <- mice(X_mat, m=1, maxit = 25, method = 'pmm', seed = 500)
+```
+
+#### Save 2020 imputed data into dataframes
+```{r}
+X_mat_complete <- complete(imputed_Data,1)
+colnames(X_mat_complete) <- X_joined$rowname
+
+X_mat_complete_df <- as.data.frame(t(X_mat_complete))
+X_mat_complete_df_2020<-X_mat_complete_df
+
+# Split up into datasets:
+rnaseq_baseline_mat_imputed_20 <- X_mat_complete_df[colnames(rnaseq.2020)]
+cytof_baseline_mat_imputed_20 <- X_mat_complete_df[colnames(cytof.2020_filt)]
+olink_baseline_mat_imputed_20 <- X_mat_complete_df[colnames(olink.2020_filt)]
+abtiters_baseline_mat_imputed_20 <- X_mat_complete_df[colnames(abtiters.2020_filt)]
+```
+
+
+#### Visualize imputed data
+```{r}
+
+X_joined <- dplyr::full_join(rownames_to_column(rnaseq_baseline_mat_imputed_20[,1:20]),
+                             rownames_to_column(cytof_baseline_mat_imputed_20),
+                             by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                           rownames_to_column(olink_baseline_mat_imputed_20),
+                           by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                           rownames_to_column(abtiters_baseline_mat_imputed_20),
+                           by = "rowname")
+            
+
+X_mat <- t(as.matrix(dplyr::select(X_joined, -rowname)))
+
+ggplot(reshape2::melt(X_mat)) +
+  geom_tile(aes(x = Var1, y = Var2, fill = value, color = value), size = 1) +
+  scale_fill_distiller(palette = "RdBu", direction = 1, na.value = "black") +
+  scale_color_distiller(palette = "RdBu", direction = 1, na.value = "black", guide = FALSE) +
+  ggtitle("RNASeq | CyTOF | OLINK | abtiters") +
+  xlab("Features") +
+  ylab("Baseline Samples") +
+  cowplot::theme_map() +
+  theme(plot.title = element_text(hjust = .5, size = 14),
+        axis.title = element_text(hjust = .5),
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10, angle = 90))
+```
+
+#### Save imputed data
+```{r}
+# imputed_dir: Local directory to save imputed data to
+setwd(imputed_dir)
+write.csv(rnaseq_baseline_mat_imputed_20,'rnaseq_baseline_mat_imputed_20_051022.csv')
+write.csv(cytof_baseline_mat_imputed_20,'cytof_baseline_mat_imputed_20_051022.csv')
+write.csv(olink_baseline_mat_imputed_20,'olink_baseline_mat_imputed_20_051022.csv')
+write.csv(abtiters_baseline_mat_imputed_20,'abtiters_baseline_mat_imputed_20_051022.csv')
+
+```
+
+#### Repeat with 2021 data
+```{r}
+listInput = list(RNASeq = rownames(rnaseq.2021),Olink = rownames(olink.2021), 
+                 CyTOF = rownames(cytof.2021), abtiters=  rownames(abtiters.2021))
+
+upset(fromList(listInput), order.by = "freq")
+```
+
+#### Visualize un-imputed data
+```{r}
+rnaseq.2021_short<-rnaseq.2021[1:36,1:20]
+X_joined <- dplyr::full_join(rownames_to_column(log2(as.data.frame(rnaseq.2021_short+1))),
+                             rownames_to_column(cytof.2021), 
+                             by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                                 rownames_to_column(olink.2021),
+                                 by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                                 rownames_to_column(log2(abtiters.2021+1)),
+                                 by = "rowname")
+X_mat <- t(as.matrix(dplyr::select(X_joined, -rowname)))
+
+ggplot(reshape2::melt(X_mat)) +
+  geom_tile(aes(x = Var1, y = Var2, fill = value, color = value), size = 1) +
+  scale_fill_distiller(palette = "RdBu", direction = 1, na.value = "black") +
+  scale_color_distiller(palette = "RdBu", direction = 1, na.value = "black", guide = FALSE) +
+  ggtitle("RNA-Seq | CyTOF | OLINK | abtiter") +
+  xlab("Features") +
+  ylab("Baseline Samples") +
+  cowplot::theme_map() +
+  theme(plot.title = element_text(hjust = .5, size = 14),
+        axis.title = element_text(hjust = .5),
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10, angle = 90))
+```
+
+#### Impute datasets
+```{r}
+X_joined <- dplyr::full_join(rownames_to_column(log2(as.data.frame(rnaseq.2021+1))),
+                             rownames_to_column(cytof.2021), 
+                             by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                                 rownames_to_column(olink.2021),
+                                 by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                                 rownames_to_column(log2(abtiters.2021+1)),
+                                 by = "rowname")
+X_mat <- t(as.matrix(dplyr::select(X_joined, -rowname)))
+imputed_Data_2021 <- mice(X_mat, m=1, maxit = 25, method = 'pmm', seed = 500)
+```
+
+#### Save 2021 imputed data into dataframes
+```{r}
+X_mat_complete <- complete(imputed_Data_2021,1)
+colnames(X_mat_complete) <- X_joined$rowname
+
+## visualize here
+
+X_mat_complete_df <- as.data.frame(t(X_mat_complete))
+#rownames(X_mat_complete_df) <- X_joined$rowname
+X_mat_complete_df_2021<-X_mat_complete_df
+
+# Split up into datasets:
+rnaseq_baseline_mat_imputed_21 <- X_mat_complete_df_2021[colnames(rnaseq.2021)]
+cytof_baseline_mat_imputed_21 <- X_mat_complete_df_2021[colnames(cytof.2021)]
+olink_baseline_mat_imputed_21 <- X_mat_complete_df_2021[colnames(olink.2021)]
+abtiters_baseline_mat_imputed_21 <- X_mat_complete_df[colnames(abtiters.2021)]
+```
+
+#### Save imputed data
+```{r}
+setwd(imputed_dir)
+write.csv(rnaseq_baseline_mat_imputed_21,'rnaseq_baseline_mat_imputed_21_051022.csv')
+write.csv(cytof_baseline_mat_imputed_21,'cytof_baseline_mat_imputed_21_051022.csv')
+write.csv(olink_baseline_mat_imputed_21,'olink_baseline_mat_imputed_21_051022.csv')
+write.csv(abtiters_baseline_mat_imputed_21,'abtiters_baseline_mat_imputed_21_051022.csv')
+```
+
+#### Visualize imputed data
+```{r}
+X_joined <- dplyr::full_join(rownames_to_column(rnaseq_baseline_mat_imputed_21[,1:20]),
+                             rownames_to_column(cytof_baseline_mat_imputed_21),
+                             by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                           rownames_to_column(olink_baseline_mat_imputed_21),
+                           by = "rowname")
+X_joined<-dplyr::full_join(X_joined,
+                           rownames_to_column(abtiters_baseline_mat_imputed_21),
+                           by = "rowname")
+            
+
+X_mat <- t(as.matrix(dplyr::select(X_joined, -rowname)))
+
+ggplot(reshape2::melt(X_mat)) +
+  geom_tile(aes(x = Var1, y = Var2, fill = value, color = value), size = 1) +
+  scale_fill_distiller(palette = "RdBu", direction = 1, na.value = "black") +
+  scale_color_distiller(palette = "RdBu", direction = 1, na.value = "black", guide = FALSE) +
+  ggtitle("RNASeq | CyTOF | OLINK | abtiters") +
+  xlab("Features") +
+  ylab("Baseline Samples") +
+  cowplot::theme_map() +
+  theme(plot.title = element_text(hjust = .5, size = 14),
+        axis.title = element_text(hjust = .5),
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10, angle = 90))
+```
