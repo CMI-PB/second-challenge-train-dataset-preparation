@@ -1,4 +1,4 @@
-The CMI-PB team conducted data harmonization and processing to provide datasets in the form of computable matrices. This involves assessing data noise, feature filtering, and batch effects between 2020 and 2021 CMI-PB datasets.
+The CMI-PB team conducted data harmonization and processing to provide datasets in the form of computable matrices. The pipeline involves assessing data noise, feature filtering, and batch effects between 2020 and 2021 CMI-PB datasets.
 
 **Key Steps:**
 - **Download Raw data files.**
@@ -7,4 +7,4 @@ The training dataset for the second challenge comprises two multi-omics datasets
 - **Read downloaded files into R environment** and perform feature filtering and save harmonized data files (Code: ./scripts/step1_read_data.Rmd)
 
 - **Assess and remove batch effects** and then save processed data files (Code: ./scripts/step2_batch_effect_correction.Rmd).
-- **Access processed data files.** These are available as R objects [here](https://www.cmi-pb.org/downloads/cmipb_challenge_datasets/current/2nd_challenge/processed_datasets/).
+- **Access processed data files.** These datafiles are available as R objects [here](https://www.cmi-pb.org/downloads/cmipb_challenge_datasets/current/2nd_challenge/processed_datasets/).
