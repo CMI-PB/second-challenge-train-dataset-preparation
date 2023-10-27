@@ -1,0 +1,188 @@
+---
+title: "Step1: Read datasets from CMI-PB website"
+#format: html
+#editor: visual
+output:
+  BiocStyle::html_document:
+    toc: true
+    toc_float:
+        collapsed: true
+        smooth_scroll: true
+    toc_depth: 3
+    fig_caption: yes
+    code_folding: show
+    number_sections: false
+date: "2023-08-21"
+---
+
+## Download all data files
+
+We manually downloaded data files manually from the following repository: [CMI-PB https site](https://www.cmi-pb.org/downloads/cmipb_challenge_datasets/current/2nd_challenge/raw_datasets/). Alternatively, `RCurl` package can be used to download data files.
+
+```{r}
+
+download_webpage = "https://www.cmi-pb.org/downloads/cmipb_challenge_datasets/current/2nd_challenge/raw_datasets/training_data/"
+#base_dir = "/home/pramod/Documents/GitHub/second-challenge-train-dataset-preparation/"
+base_dir = "../"
+
+dir_raw_training <- paste0(base_dir, "data/raw_training_dataset/")
+dir_raw_prediction <- paste0(base_dir, "data/raw_prediction_dataset/")
+#dir_rds_objects <- paste0(base_dir, "objects/")
+
+## `codebase.R` installs required packages and all house keepinf functions
+source(paste0(base_dir, "scripts/codebase.R"))
+
+
+```
+
+## Read subject and sample metadata
+
+```{r}
+## subject files
+d2020_subject <- read_tsv(paste0(dir_raw_training, "2020LD_subject.tsv"))
+d2021_subject <- read_tsv(paste0(dir_raw_training, "2021LD_subject.tsv"))
+d2022_subject <- read_tsv(paste0(dir_raw_prediction, "2022BD_subject.tsv"))
+
+subject_training <-bind_rows(d2020_subject, d2021_subject)
+
+## specimen files
+d2020_specimen <- read_tsv(paste0(dir_raw_training, "2020LD_specimen.tsv"))
+d2021_specimen <- read_tsv(paste0(dir_raw_training, "2021LD_specimen.tsv"))
+d2022_specimen <- read_tsv(paste0(dir_raw_prediction, "2022BD_specimen.tsv"))
+
+specimen_training <-bind_rows(d2020_specimen, d2021_specimen)
+
+## create new object subject_specimen
+
+subject_specimen_training <- specimen_training %>%
+  left_join(subject_training) %>%
+  mutate(timepoint = planned_day_relative_to_boost)
+
+```
+
+## Read experimental data
+
+```{r}
+## plasma_antibody_levels files
+
+d2020_plasma_antibody_levels <- read_tsv(paste0(dir_raw_training, "2020LD_plasma_ab_titer.tsv")) %>%
+  mutate(isotype_antigen = paste0(isotype,"_", antigen))  %>%
+  dplyr::select(-antigen, -isotype)
+
+d2021_plasma_antibody_levels <- read_tsv(paste0(dir_raw_training, "2021LD_plasma_ab_titer.tsv")) %>%
+  mutate(isotype_antigen = paste0(isotype,"_", antigen))  %>%
+  dplyr::select(-antigen, -isotype)
+
+d2022_plasma_antibody_levels <- read_tsv(paste0(dir_raw_prediction, "2022BD_plasma_ab_titer.tsv")) %>%
+  mutate(isotype_antigen = paste0(isotype,"_", antigen))  %>%
+  dplyr::select(-antigen, -isotype)
+
+plasma_antibody_levels_common_features <- Reduce(intersect, list(unique(d2020_plasma_antibody_levels$isotype_antigen), unique(d2021_plasma_antibody_levels$isotype_antigen), unique(d2022_plasma_antibody_levels$isotype_antigen))) 
+
+plasma_antibody_levels_long <- bind_rows(d2020_plasma_antibody_levels, d2021_plasma_antibody_levels) %>%
+  filter(isotype_antigen %in% plasma_antibody_levels_common_features)
+
+plasma_antibody_levels_wide <- plasma_antibody_levels_long %>%
+  dplyr::select(specimen_id, isotype_antigen, MFI_normalised) %>%
+  pivot_wider(names_from = isotype_antigen, values_from = MFI_normalised)
+
+```
+
+```{r}
+## plasma_cytokine_concentrations files
+
+d2020_plasma_cytokine_concentrations <- read_tsv(paste0(dir_raw_training, "2020LD_plasma_cytokine_concentration.tsv"))
+d2021_plasma_cytokine_concentrations <- read_tsv(paste0(dir_raw_training, "2021LD_plasma_cytokine_concentration.tsv"))
+d2022_plasma_cytokine_concentrations <- read_tsv(paste0(dir_raw_prediction, "2022BD_plasma_cytokine_concentration.tsv"))
+
+plasma_cytokine_concentrations_common_features <- Reduce(intersect, list(unique(d2020_plasma_cytokine_concentrations$protein_id), unique(d2021_plasma_cytokine_concentrations$protein_id), unique(d2022_plasma_cytokine_concentrations$protein_id))) 
+
+plasma_cytokine_concentrations_long <-bind_rows(d2020_plasma_cytokine_concentrations, d2021_plasma_cytokine_concentrations) %>%
+  filter(protein_id %in% plasma_cytokine_concentrations_common_features)
+
+plasma_cytokine_concentrations_wide <- plasma_cytokine_concentrations_long %>%
+  dplyr::select(specimen_id, protein_id, protein_expression) %>%
+  pivot_wider(names_from = protein_id, values_from = protein_expression)
+
+## pbmc_cell_frequency files
+
+d2020_pbmc_cell_frequency <- read_tsv(paste0(dir_raw_training, "2020LD_pbmc_cell_frequency.tsv"))
+d2021_pbmc_cell_frequency <- read_tsv(paste0(dir_raw_training, "2021LD_pbmc_cell_frequency.tsv"))
+d2022_pbmc_cell_frequency <- read_tsv(paste0(dir_raw_prediction, "2022BD_pbmc_cell_frequency.tsv"))
+
+pbmc_cell_frequency_common_features <- Reduce(intersect, list(unique(d2020_pbmc_cell_frequency$cell_type_name), unique(d2021_pbmc_cell_frequency$cell_type_name), unique(d2022_pbmc_cell_frequency$cell_type_name))) 
+
+pbmc_cell_frequency_long <-bind_rows(d2020_pbmc_cell_frequency, d2021_pbmc_cell_frequency) %>%
+  filter(cell_type_name %in% pbmc_cell_frequency_common_features)
+
+pbmc_cell_frequency_wide <- pbmc_cell_frequency_long %>%
+  pivot_wider(names_from = cell_type_name, values_from = percent_live_cell)
+
+```
+
+```{r}
+## pbmc_gene_expression
+d2020_pbmc_gene_expression <- read_tsv(paste0(dir_raw_training, "2020LD_pbmc_gene_expression.tsv"))
+d2021_pbmc_gene_expression <- read_tsv(paste0(dir_raw_training, "2021LD_pbmc_gene_expression.tsv"))
+d2022_pbmc_gene_expression <- read_tsv(paste0(dir_raw_prediction, "2022BD_pbmc_gene_expression.tsv"))
+
+colnames(d2020_pbmc_gene_expression) = c('versioned_ensembl_gene_id','specimen_id','tpm','raw_count')
+colnames(d2021_pbmc_gene_expression) = c('versioned_ensembl_gene_id','specimen_id','tpm','raw_count')
+colnames(d2022_pbmc_gene_expression) = c('versioned_ensembl_gene_id','specimen_id','tpm','raw_count')
+
+
+## Save long files for future use (optional)
+#write_tsv(d2020_pbmc_gene_expression, paste0(dir_raw_training, "2020LD_pbmc_gene_expression_1.tsv"))
+#write_tsv(d2021_pbmc_gene_expression, paste0(dir_raw_training, "2021LD_pbmc_gene_expression_1.tsv"))
+#write_tsv(d2022_pbmc_gene_expression, paste0(dir_raw_prediction, "2022BD_pbmc_gene_expression_1.tsv"))
+
+pbmc_gene_expression_common_features <- Reduce(intersect, list(unique(d2020_pbmc_gene_expression$versioned_ensembl_gene_id), unique(d2021_pbmc_gene_expression$versioned_ensembl_gene_id), unique(d2022_pbmc_gene_expression$versioned_ensembl_gene_id))) 
+
+pbmc_gene_expression_long <-bind_rows(d2020_pbmc_gene_expression, d2021_pbmc_gene_expression) %>%
+  filter(versioned_ensembl_gene_id %in% pbmc_gene_expression_common_features)
+
+pbmc_gene_expression_wide <- pbmc_gene_expression_long %>%
+  dplyr::select(specimen_id, versioned_ensembl_gene_id, raw_count) %>%
+  pivot_wider(names_from = versioned_ensembl_gene_id, values_from = raw_count)
+
+```
+
+```{r}
+master_database_data <- list(
+  
+  subject_specimen = subject_specimen_training,
+  plasma_antibody_levels = list(
+    
+    wide = plasma_antibody_levels_wide,
+    long = plasma_antibody_levels_long
+    ),
+  plasma_cytokine_concentrations = list(
+    
+    wide = plasma_cytokine_concentrations_wide,
+    long = plasma_cytokine_concentrations_long
+    ),
+  pbmc_cell_frequency_wide = list(
+    
+    wide = pbmc_cell_frequency_wide,
+    long = pbmc_cell_frequency_long
+    ),
+  pbmc_gene_expression_wide = list(
+    
+    wide = pbmc_gene_expression_wide,
+    long = pbmc_gene_expression_long
+    )
+)
+
+
+#sapply(master_database_data$subject_specimen, dim)
+sapply(master_database_data$plasma_antibody_levels, dim)
+sapply(master_database_data$plasma_cytokine_concentrations, dim)
+sapply(master_database_data$pbmc_cell_frequency_wide, dim)
+sapply(master_database_data$pbmc_gene_expression_wide, dim)
+```
+
+## Save data as RDS File
+
+```{r}
+#saveRDS(master_database_data, file = paste0(dir_rds_objects, "master_harmonized_training_data.RDS"))
+```
