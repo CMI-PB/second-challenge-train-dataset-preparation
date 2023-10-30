@@ -1,5 +1,5 @@
 ---
-title: "Step1: Read datasets from CMI-PB website"
+title: "Step1: Read datasets from CMI-PB website and perform data harmoniation"
 #format: html
 #editor: visual
 output:
@@ -27,7 +27,7 @@ base_dir = "../"
 
 dir_raw_training <- paste0(base_dir, "data/raw_training_dataset/")
 dir_raw_prediction <- paste0(base_dir, "data/raw_prediction_dataset/")
-#dir_rds_objects <- paste0(base_dir, "objects/")
+dir_rds_objects <- paste0(base_dir, "data/output/")
 
 ## `codebase.R` installs required packages and all house keepinf functions
 source(paste0(base_dir, "scripts/codebase.R"))
@@ -182,7 +182,12 @@ sapply(master_database_data$pbmc_gene_expression_wide, dim)
 ```
 
 ## Save data as RDS File
-
 ```{r}
 #saveRDS(master_database_data, file = paste0(dir_rds_objects, "master_harmonized_training_data.RDS"))
 ```
+
+## session_info()
+```{r}
+session_info()
+```
+
