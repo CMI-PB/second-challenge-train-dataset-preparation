@@ -804,3 +804,35 @@ mad_calculations = function(tpm_data, metadata, my_dataset, plot = TRUE){
   
   return(df_mad_return)
 }
+
+# Recursive function to save data frames and explore lists
+save_dataframes_to_tsv <- function(obj, prefix = "") {
+  if (is.data.frame(obj)) {
+    # If the object is a data frame, save it to a .tsv file
+    write.table(obj, 
+                file = paste0(dir_rds_objects, prefix, ".tsv"), 
+                sep = "\t", 
+                row.names = FALSE, 
+                quote = FALSE)
+  }
+  else if (is.matrix(obj)) {
+    # If the object is a data frame, save it to a .tsv file
+    write.table(obj, 
+                file = paste0(dir_rds_objects, prefix, ".tsv"), 
+                sep = "\t", 
+                row.names = TRUE, 
+                quote = FALSE)
+  }
+  else if (is.list(obj)) {
+    # If the object is a list, iterate over its elements
+    for (name in names(obj)) {
+      
+      # Construct a new prefix for the file name based on the current name
+      new_prefix <- ifelse(prefix == "", name, paste0(prefix, "_", name))
+      
+      print(paste0(prefix, "--->", new_prefix))
+      # Recursive call with the element of the list
+      save_dataframes_to_tsv(obj[[name]], new_prefix)
+    }
+  }
+}
